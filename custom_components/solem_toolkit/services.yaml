@@ -1,0 +1,71 @@
+list_characteristics:
+  description: "List characteristics of device"
+  fields:
+    device_mac:
+      description: "Device's MAC address"
+      example: "00:11:22:33:44:55"
+
+turn_off_permanent:
+  description: "Turn off the sprinkler permanently"
+  fields:
+    device_mac:
+      description: "Device's MAC address"
+      example: "00:11:22:33:44:55"
+
+turn_off_x_days:
+  description: "Turn off sprinkler for X days"
+  fields:
+    device_mac:
+      description: "Device's MAC address"
+      example: "00:11:22:33:44:55"
+    days:
+      description: "Number of days the sprinkler should be off"
+      example: "1"
+
+turn_on:
+  description: "Turn on the sprinkler"
+  fields:
+    device_mac:
+      description: "Device's MAC address"
+      example: "00:11:22:33:44:55"
+
+sprinkle_station_x_for_y_minutes:
+  description: "Sprinkle on station X for Y minutes"
+  fields:
+    device_mac:
+      description: "Device's MAC address"
+      example: "00:11:22:33:44:55"
+    station:
+      description: "Station id that should be running"
+      example: "1"
+    minutes:
+      description: "Number of minutes the sprinkler should be running"
+      example: "1"
+
+
+sprinkle_all_stations_for_y_minutes:
+  description: "Sprinkle on all stations for Y minutes"
+  fields:
+    device_mac:
+      description: "Device's MAC address"
+      example: "00:11:22:33:44:55"
+    minutes:
+      description: "Number of minutes the sprinkler on all the stations should be running"
+      example: "1"
+
+run_program_x:
+  description: "Run program X"
+  fields:
+    device_mac:
+      description: "Device's MAC address"
+      example: "00:11:22:33:44:55"
+    program:
+      description: "Program id that should be running"
+      example: "1"
+
+stop_manual_sprinkle:
+  description: "Stop manual sprinkle"
+  fields:
+    device_mac:
+      description: "Device's MAC address"
+      example: "00:11:22:33:44:55"
