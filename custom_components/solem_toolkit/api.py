@@ -79,25 +79,24 @@ class SolemAPI:
 
     async def _connect_client(self) -> BleakClient:
         """Establish a robust connection using bleak-retry-connector."""
-        async with self._conn_lock:
-            ble_device = await self._resolve_ble_device()
-            try:
-                client = await establish_connection(
-                    BleakClient,
-                    ble_device,
-                    name=f"Solem - {self.mac_address}",
-                    timeout=self.bluetooth_timeout,
-                    max_attempts=3,
-                )
-                return client
-            except BleakOutOfConnectionSlotsError as exc:
-                raise APIConnectionError(
-                    "Bluetooth adapter/proxy out of connection slots or device busy/unreachable"
-                ) from exc
-            except (BleakDBusError, TimeoutError, OSError) as exc:
-                raise APIConnectionError("Timeout connecting to device") from exc
-            except Exception as exc:  # noqa: BLE001
-                raise APIConnectionError("Unexpected BLE connection error") from exc
+        ble_device = await self._resolve_ble_device()
+        try:
+            client = await establish_connection(
+                BleakClient,
+                ble_device,
+                name=f"Solem - {self.mac_address}",
+                timeout=self.bluetooth_timeout,
+                max_attempts=3,
+            )
+            return client
+        except BleakOutOfConnectionSlotsError as exc:
+            raise APIConnectionError(
+                "Bluetooth adapter/proxy out of connection slots or device busy/unreachable"
+            ) from exc
+        except (BleakDBusError, TimeoutError, OSError) as exc:
+            raise APIConnectionError("Timeout connecting to device") from exc
+        except Exception as exc:  # noqa: BLE001
+            raise APIConnectionError("Unexpected BLE connection error") from exc
 
     async def list_characteristics(self) -> dict:
         """Return discovered services/characteristics (debug helper)."""
@@ -162,35 +161,35 @@ class SolemAPI:
         try:
             yield
         finally:
-            with suppress(Exception):
-                await client.stop_notify(NOTIFICATION_UUID)
+            pass
 
     async def _write_and_commit(self, command: bytes) -> None:
         """Write a command then commit it (Solem protocol) - Ultimate Edition."""
-        client = await self._connect_client()
-        try:
-            if not client.is_connected:
-                raise APIConnectionError("Failed connecting!")
+        async with self._conn_lock:
+            client = await self._connect_client()
+            try:
+                if not client.is_connected:
+                    raise APIConnectionError("Failed connecting!")
 
-            # 1. We subscribe to the Notification channel to stabilize the BLE stack
-            async with self._notification_session(client):
-                # Tiny wait to allow the notification subscription to be fully active
-                await asyncio.sleep(0.5)
-                
-                # 2. We send the command
-                await self._write_with_auth_retry(client, command)
-                # 3. WE WAIT to let the Solem process and potentially notify us
-                await asyncio.sleep(1.0)
-                
-                # 4. We send the commit frame
-                commit = struct.pack(">BB", 0x3B, 0x00)
-                await self._write_with_auth_retry(client, commit)
-                # 5. WE WAIT to let the Solem process the commit before brutally severing the connection
-                await asyncio.sleep(1.0)
-                
-        finally:
-            with suppress(Exception):
-                await client.disconnect()
+                # 1. We subscribe to the Notification channel to stabilize the BLE stack
+                async with self._notification_session(client):
+                    # Tiny wait to allow the notification subscription to be fully active
+                    await asyncio.sleep(0.5)
+                    
+                    # 2. We send the command
+                    await self._write_with_auth_retry(client, command)
+                    # 3. WE WAIT to let the Solem process and potentially notify us
+                    await asyncio.sleep(1.0)
+                    
+                    # 4. We send the commit frame
+                    commit = struct.pack(">BB", 0x3B, 0x00)
+                    await self._write_with_auth_retry(client, commit)
+                    # 5. WE WAIT to let the Solem process the commit before brutally severing the connection
+                    await asyncio.sleep(1.0)
+                    
+            finally:
+                with suppress(Exception):
+                    await client.disconnect()
 
     async def turn_on(self) -> None:
         """Turn on controller (enable watering)."""
