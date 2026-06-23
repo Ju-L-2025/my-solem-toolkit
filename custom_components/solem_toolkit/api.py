@@ -61,33 +61,29 @@ class SolemAPI:
         """Return a list of discovered BLE devices."""
         return await BleakScanner.discover(timeout=5.0)
 
-    async def _resolve_ble_device(self) -> BLEDevice:
-        """Resolve a BLEDevice for the configured MAC address."""
-        # First attempt: prefer Home Assistant-managed scanners so Bluetooth proxies are supported
-        ble_device = async_ble_device_from_address(
-            self.hass, self.mac_address, connectable=True
-        )
-        if ble_device is not None:
-            return ble_device
+    async def _find_device(self) -> BLEDevice:
+        """Find the device by MAC address."""
+        if not self.controller_mac:
+            _LOGGER.error("BLE_FATAL_ERROR: MAC address not provided to _find_device")
+            raise APIConnectionError("MAC address not provided")
 
-        # Second attempt: direct lookup by address (fast-path on most platforms)
-        ble_device = await BleakScanner.find_device_by_address(
-            self.mac_address, timeout=5.0
+        device = bluetooth.async_ble_device_from_address(
+            self.hass, self.controller_mac, connectable=True
         )
-        if ble_device is not None:
-            return ble_device
+        if device:
+            return device
 
-        # Fallback: full scan and manual match (some platforms/proxies behave like this)
-        devices = await BleakScanner.discover(timeout=5.0)
+        devices = await self.scan_bluetooth()
         for d in devices:
-            if (d.address or "").lower() == self.mac_address.lower():
+            if (d.address or "").lower() == self.controller_mac.lower():
                 return d
 
-        raise APIConnectionError("Device not found! Failed connecting!")
+        _LOGGER.error("BLE_FATAL_ERROR: Device %s not found in Bluetooth scan! Is it turned on and in range?", self.controller_mac)
+        raise APIConnectionError(f"Device {self.controller_mac} not found in scan")
 
     async def _connect_client(self) -> BleakClient:
         """Establish a robust connection using bleak-retry-connector."""
-        ble_device = await self._resolve_ble_device()
+        ble_device = await self._find_device()
         try:
             client = await establish_connection(
                 BleakClient,
