@@ -152,15 +152,15 @@ class SolemAPI:
         await client.write_gatt_char(self.characteristic_uuid, payload, response=False)
 
     @asynccontextmanager
-    async def _notification_session(self, client: BleakClient) -> AsyncIterator[None]:
+    async def _notification_session(self, client: BleakClient, event: asyncio.Event | None = None) -> AsyncIterator[None]:
         """Subscribe to controller notifications for the duration of a command."""
+        def callback(sender, data: bytearray) -> None:
+            _LOGGER.debug("Notification from %s: %s", sender, data.hex())
+            if event is not None:
+                event.set()
+
         try:
-            await client.start_notify(
-                NOTIFICATION_UUID,
-                lambda sender, data: _LOGGER.debug(
-                    "Notification from %s: %s", sender, data.hex()
-                ),
-            )
+            await client.start_notify(NOTIFICATION_UUID, callback)
         except Exception as exc:  # noqa: BLE001
             raise APIConnectionError(
                 "Failed subscribing to controller notifications"
@@ -169,7 +169,8 @@ class SolemAPI:
         try:
             yield
         finally:
-            pass
+            with suppress(Exception):
+                await client.stop_notify(NOTIFICATION_UUID)
 
     async def _write_and_commit(self, command: bytes) -> None:
         """Write a command then commit it (Solem protocol) - Ultimate Edition."""
@@ -179,21 +180,36 @@ class SolemAPI:
                 if not client.is_connected:
                     raise APIConnectionError("Failed connecting!")
 
+                notify_event = asyncio.Event()
+
                 # 1. We subscribe to the Notification channel to stabilize the BLE stack
-                async with self._notification_session(client):
+                async with self._notification_session(client, notify_event):
                     # Tiny wait to allow the notification subscription to be fully active
                     await asyncio.sleep(0.5)
                     
                     # 2. We send the command
                     await self._write_with_auth_retry(client, command)
-                    # 3. WE WAIT to let the Solem process and potentially notify us
-                    await asyncio.sleep(1.0)
+                    
+                    # 3. WE WAIT for the Solem to acknowledge the command via notification
+                    try:
+                        await asyncio.wait_for(notify_event.wait(), timeout=3.0)
+                    except TimeoutError:
+                        _LOGGER.warning("Timeout waiting for Solem command ACK notification")
+                        
+                    notify_event.clear()
                     
                     # 4. We send the commit frame
                     commit = struct.pack(">BB", 0x3B, 0x00)
                     await self._write_with_auth_retry(client, commit)
-                    # 5. WE WAIT to let the Solem process the commit before brutally severing the connection
-                    await asyncio.sleep(1.0)
+                    
+                    # 5. WE WAIT for the Solem to send the final 18-byte status notification
+                    try:
+                        await asyncio.wait_for(notify_event.wait(), timeout=4.0)
+                    except TimeoutError:
+                        _LOGGER.warning("Timeout waiting for Solem final STATUS notification")
+                        
+                    # Tiny grace period so the Bluetooth stack digests the final packet
+                    await asyncio.sleep(0.5)
                     
             finally:
                 with suppress(Exception):
