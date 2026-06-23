@@ -63,23 +63,23 @@ class SolemAPI:
 
     async def _find_device(self) -> BLEDevice:
         """Find the device by MAC address."""
-        if not self.controller_mac:
+        if not self.mac_address:
             _LOGGER.error("BLE_FATAL_ERROR: MAC address not provided to _find_device")
             raise APIConnectionError("MAC address not provided")
 
         device = bluetooth.async_ble_device_from_address(
-            self.hass, self.controller_mac, connectable=True
+            self.hass, self.mac_address, connectable=True
         )
         if device:
             return device
 
         devices = await self.scan_bluetooth()
         for d in devices:
-            if (d.address or "").lower() == self.controller_mac.lower():
+            if (d.address or "").lower() == self.mac_address.lower():
                 return d
 
-        _LOGGER.error("BLE_FATAL_ERROR: Device %s not found in Bluetooth scan! Is it turned on and in range?", self.controller_mac)
-        raise APIConnectionError(f"Device {self.controller_mac} not found in scan")
+        _LOGGER.error("BLE_FATAL_ERROR: Device %s not found in Bluetooth scan! Is it turned on and in range?", self.mac_address)
+        raise APIConnectionError(f"Device {self.mac_address} not found in scan")
 
     async def _connect_client(self) -> BleakClient:
         """Establish a robust connection using bleak-retry-connector."""
@@ -94,15 +94,15 @@ class SolemAPI:
             )
             return client
         except BleakOutOfConnectionSlotsError as exc:
-            _LOGGER.error("BLE_FATAL_ERROR: Bluetooth adapter/proxy out of connection slots for %s: %s", self.controller_mac, repr(exc))
+            _LOGGER.error("BLE_FATAL_ERROR: Bluetooth adapter/proxy out of connection slots for %s: %s", self.mac_address, repr(exc))
             raise APIConnectionError(
                 "Bluetooth adapter/proxy out of connection slots or device busy/unreachable"
             ) from exc
         except (BleakDBusError, TimeoutError, OSError) as exc:
-            _LOGGER.error("BLE_FATAL_ERROR: Timeout/DBus error connecting to %s: %s", self.controller_mac, repr(exc))
+            _LOGGER.error("BLE_FATAL_ERROR: Timeout/DBus error connecting to %s: %s", self.mac_address, repr(exc))
             raise APIConnectionError("Timeout connecting to device") from exc
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.error("BLE_FATAL_ERROR: Unexpected connection error for %s: %s", self.controller_mac, repr(exc))
+            _LOGGER.error("BLE_FATAL_ERROR: Unexpected connection error for %s: %s", self.mac_address, repr(exc))
             raise APIConnectionError("Unexpected BLE connection error") from exc
 
     async def list_characteristics(self) -> dict:
