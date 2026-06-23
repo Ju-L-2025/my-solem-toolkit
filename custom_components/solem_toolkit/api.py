@@ -28,6 +28,15 @@ from .const import CHARACTERISTIC_UUID, DEFAULT_BLUETOOTH_TIMEOUT, NOTIFICATION_
 
 _LOGGER = logging.getLogger(__name__)
 
+# Module-level lock shared by ALL SolemAPI instances.
+# This is critical because services.py creates a new SolemAPI per service call,
+# so a per-instance lock would be useless for preventing concurrent BLE access.
+_GLOBAL_BLE_LOCK = asyncio.Lock()
+
+# Cooldown between BLE sessions (seconds). The Solem controller needs time
+# to fully release a connection before accepting a new one.
+_BLE_COOLDOWN_SECONDS = 3.0
+
 
 class APIConnectionError(Exception):
     """Exception raised when a BLE connection or write fails."""
@@ -47,7 +56,6 @@ class SolemAPI:
         self.bluetooth_timeout = bluetooth_timeout
 
         self.characteristic_uuid: str = CHARACTERISTIC_UUID
-        self._conn_lock = asyncio.Lock()
 
     async def scan_bluetooth(self) -> list[BLEDevice]:
         """Return a list of discovered BLE devices."""
@@ -165,7 +173,7 @@ class SolemAPI:
 
     async def _write_and_commit(self, command: bytes) -> None:
         """Write a command then commit it (Solem protocol) - Ultimate Edition."""
-        async with self._conn_lock:
+        async with _GLOBAL_BLE_LOCK:
             client = await self._connect_client()
             try:
                 if not client.is_connected:
@@ -190,6 +198,9 @@ class SolemAPI:
             finally:
                 with suppress(Exception):
                     await client.disconnect()
+                # 6. Cooldown: let the Solem controller fully release the BLE session
+                # before allowing the next command through the global lock
+                await asyncio.sleep(_BLE_COOLDOWN_SECONDS)
 
     async def turn_on(self) -> None:
         """Turn on controller (enable watering)."""
