@@ -98,12 +98,15 @@ class SolemAPI:
             )
             return client
         except BleakOutOfConnectionSlotsError as exc:
+            _LOGGER.error("BLE_FATAL_ERROR: Bluetooth adapter/proxy out of connection slots for %s: %s", self.controller_mac, repr(exc))
             raise APIConnectionError(
                 "Bluetooth adapter/proxy out of connection slots or device busy/unreachable"
             ) from exc
         except (BleakDBusError, TimeoutError, OSError) as exc:
+            _LOGGER.error("BLE_FATAL_ERROR: Timeout/DBus error connecting to %s: %s", self.controller_mac, repr(exc))
             raise APIConnectionError("Timeout connecting to device") from exc
         except Exception as exc:  # noqa: BLE001
+            _LOGGER.error("BLE_FATAL_ERROR: Unexpected connection error for %s: %s", self.controller_mac, repr(exc))
             raise APIConnectionError("Unexpected BLE connection error") from exc
 
     async def list_characteristics(self) -> dict:
@@ -194,7 +197,7 @@ class SolemAPI:
                     try:
                         await asyncio.wait_for(notify_event.wait(), timeout=3.0)
                     except TimeoutError:
-                        _LOGGER.warning("Timeout waiting for Solem command ACK notification")
+                        _LOGGER.error("BLE_TIMEOUT_ERROR: Timeout waiting for Solem command ACK notification. Did the controller crash?")
                         
                     notify_event.clear()
                     
@@ -206,7 +209,7 @@ class SolemAPI:
                     try:
                         await asyncio.wait_for(notify_event.wait(), timeout=4.0)
                     except TimeoutError:
-                        _LOGGER.warning("Timeout waiting for Solem final STATUS notification")
+                        _LOGGER.error("BLE_TIMEOUT_ERROR: Timeout waiting for Solem final 18-byte STATUS notification. Disconnecting prematurely!")
                         
                     # Tiny grace period so the Bluetooth stack digests the final packet
                     await asyncio.sleep(0.5)
